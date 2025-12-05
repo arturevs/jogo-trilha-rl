@@ -1,4 +1,4 @@
-# Arquivo: train.py
+import math
 import torch
 import torch.optim as optim
 import torch.nn as nn
@@ -73,12 +73,14 @@ def train():
     optimizer = optim.Adam(policy_net.parameters(), lr=LR)
     memory = ReplayBuffer(MEMORY_SIZE)
     
-    epsilon = EPSILON_START
+    # epsilon = EPSILON_START
     num_episodes = 5000
 
     print(f"Iniciando treino em: {device}")
 
     for episode in range(num_episodes):
+        epsilon = EPSILON_END + (EPSILON_START - EPSILON_END) * \
+                  math.exp(-1. * episode / EPSILON_DECAY)
         state, _ = env.reset()
         state = torch.FloatTensor(state).unsqueeze(0).to(device) # Adiciona dimensão de batch (1, 3, 24)
         total_reward = 0
@@ -137,12 +139,13 @@ def train():
                 optimizer.step()
 
         # Decaimento de Epsilon
-        epsilon = max(EPSILON_END, epsilon * 0.995)
+        # epsilon = max(EPSILON_END, epsilon * 0.995)
         
         # Atualiza rede alvo
         if episode % TARGET_UPDATE == 0:
             target_net.load_state_dict(policy_net.state_dict())
             print(f"Episódio {episode}: Reward Total: {total_reward:.2f}, Epsilon: {epsilon:.2f}")
+            torch.save(policy_net.state_dict(), "checkpoint_trilha.pth")
 
     # Salvar modelo final
     torch.save(policy_net.state_dict(), "trilha_final.pth")

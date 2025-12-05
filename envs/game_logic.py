@@ -2,11 +2,35 @@ class TrilhaGame:
     # --- DEFINIÇÕES ESTÁTICAS (Constantes) ---
     # Mapeamento de vizinhos (Grafo)
     ADJACENCY = {
-        0: {"d": 1, "b": 9},
-        1: {"e": 0, "d": 2, "b": 4},
-        # ... (Preencher com aquele mapa completo que fizemos antes)
-        # Para o código funcionar, precisamos do mapa completo aqui.
-        # Vou resumir para não ficar gigante, mas você usa o full.
+        # --- Anel Externo ---
+        0: {'d': 1, 'b': 7},
+        1: {'e': 0, 'd': 2, 'b': 9},
+        2: {'e': 1, 'b': 3},
+        3: {'c': 2, 'b': 4, 'e': 11},
+        4: {'c': 3, 'e': 5},
+        5: {'d': 4, 'e': 6, 'c': 13},
+        6: {'d': 5, 'c': 7},
+        7: {'b': 6, 'c': 0, 'd': 15},
+        
+        # --- Anel do Meio ---
+        8: {'d': 9, 'b': 15},
+        9: {'e': 8, 'd': 10, 'c': 1, 'b': 17},
+        10: {'e': 9, 'b': 11},
+        11: {'c': 10, 'b': 12, 'd': 3, 'e': 19},
+        12: {'c': 11, 'e': 13},
+        13: {'d': 12, 'e': 14, 'b': 5, 'c': 21},
+        14: {'d': 13, 'c': 15},
+        15: {'b': 14, 'c': 8, 'e': 7, 'd': 23},
+        
+        # --- Anel Interno ---
+        16: {'d': 17, 'b': 23},
+        17: {'e': 16, 'd': 18, 'c': 9},
+        18: {'e': 17, 'b': 19},
+        19: {'c': 18, 'b': 20, 'd': 11},
+        20: {'c': 19, 'e': 21},
+        21: {'d': 20, 'e': 22, 'b': 13},
+        22: {'d': 21, 'c': 23},
+        23: {'b': 22, 'c': 16, 'e': 15}
     }
 
     # Todas as trilhas possíveis (Linhas de vitória)
@@ -163,6 +187,8 @@ class TrilhaGame:
 
     # --- AUXILIARES INTERNOS ---
 
+    
+
     def check_mill_formed(self, pos_idx):
         """Verifica se a peça recém colocada/movida em pos_idx fechou uma trilha."""
         player = self.board[pos_idx]
@@ -172,6 +198,35 @@ class TrilhaGame:
                 if all(self.board[p] == player for p in mill):
                     return True
         return False
+    
+    def is_part_of_mill(self, pos_idx, player):
+        """Verifica se a peça na posição pos_idx faz parte de uma trilha formada."""
+        # Se a peça nem é do jogador, não é trilha dele
+        if self.board[pos_idx] != player:
+            return False
+            
+        for mill in self.POSSIBLE_MILLS:
+            if pos_idx in mill:
+                # Verifica se as outras 2 casas da trilha também são do jogador
+                if all(self.board[p] == player for p in mill):
+                    return True
+        return False
+
+    def all_enemies_in_mill(self, player):
+        """Verifica se TODAS as peças do 'player' estão protegidas em trilhas."""
+        # Lista todas as posições onde o inimigo tem peças
+        indices_player = [i for i, p in enumerate(self.board) if p == player]
+        
+        if not indices_player:
+            return False # Se não tem peças, irrelevante
+            
+        # Se acharmos UMA peça que não está em trilha, retorna False (pode remover essa)
+        for idx in indices_player:
+            if not self.is_part_of_mill(idx, player):
+                return False
+                
+        # Se chegou aqui, é porque todas estão em trilha (então a regra de proteção cai)
+        return True
 
     def _switch_turn_logic(self):
         """Troca o turno e verifica transição de fase."""
