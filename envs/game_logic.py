@@ -3,34 +3,32 @@ class TrilhaGame:
     # Mapeamento de vizinhos (Grafo)
     ADJACENCY = {
         # --- Anel Externo ---
-        0: {'d': 1, 'b': 7},
-        1: {'e': 0, 'd': 2, 'b': 9},
-        2: {'e': 1, 'b': 3},
-        3: {'c': 2, 'b': 4, 'e': 11},
-        4: {'c': 3, 'e': 5},
-        5: {'d': 4, 'e': 6, 'c': 13},
-        6: {'d': 5, 'c': 7},
-        7: {'b': 6, 'c': 0, 'd': 15},
-        
+        0: {"d": 1, "b": 7},
+        1: {"e": 0, "d": 2, "b": 9},
+        2: {"e": 1, "b": 3},
+        3: {"c": 2, "b": 4, "e": 11},
+        4: {"c": 3, "e": 5},
+        5: {"d": 4, "e": 6, "c": 13},
+        6: {"d": 5, "c": 7},
+        7: {"b": 6, "c": 0, "d": 15},
         # --- Anel do Meio ---
-        8: {'d': 9, 'b': 15},
-        9: {'e': 8, 'd': 10, 'c': 1, 'b': 17},
-        10: {'e': 9, 'b': 11},
-        11: {'c': 10, 'b': 12, 'd': 3, 'e': 19},
-        12: {'c': 11, 'e': 13},
-        13: {'d': 12, 'e': 14, 'b': 5, 'c': 21},
-        14: {'d': 13, 'c': 15},
-        15: {'b': 14, 'c': 8, 'e': 7, 'd': 23},
-        
+        8: {"d": 9, "b": 15},
+        9: {"e": 8, "d": 10, "c": 1, "b": 17},
+        10: {"e": 9, "b": 11},
+        11: {"c": 10, "b": 12, "d": 3, "e": 19},
+        12: {"c": 11, "e": 13},
+        13: {"d": 12, "e": 14, "b": 5, "c": 21},
+        14: {"d": 13, "c": 15},
+        15: {"b": 14, "c": 8, "e": 7, "d": 23},
         # --- Anel Interno ---
-        16: {'d': 17, 'b': 23},
-        17: {'e': 16, 'd': 18, 'c': 9},
-        18: {'e': 17, 'b': 19},
-        19: {'c': 18, 'b': 20, 'd': 11},
-        20: {'c': 19, 'e': 21},
-        21: {'d': 20, 'e': 22, 'b': 13},
-        22: {'d': 21, 'c': 23},
-        23: {'b': 22, 'c': 16, 'e': 15}
+        16: {"d": 17, "b": 23},
+        17: {"e": 16, "d": 18, "c": 9},
+        18: {"e": 17, "b": 19},
+        19: {"c": 18, "b": 20, "d": 11},
+        20: {"c": 19, "e": 21},
+        21: {"d": 20, "e": 22, "b": 13},
+        22: {"d": 21, "c": 23},
+        23: {"b": 22, "c": 16, "e": 15},
     }
 
     # Todas as trilhas possíveis (Linhas de vitória)
@@ -187,8 +185,6 @@ class TrilhaGame:
 
     # --- AUXILIARES INTERNOS ---
 
-    
-
     def check_mill_formed(self, pos_idx):
         """Verifica se a peça recém colocada/movida em pos_idx fechou uma trilha."""
         player = self.board[pos_idx]
@@ -198,13 +194,13 @@ class TrilhaGame:
                 if all(self.board[p] == player for p in mill):
                     return True
         return False
-    
+
     def is_part_of_mill(self, pos_idx, player):
         """Verifica se a peça na posição pos_idx faz parte de uma trilha formada."""
         # Se a peça nem é do jogador, não é trilha dele
         if self.board[pos_idx] != player:
             return False
-            
+
         for mill in self.POSSIBLE_MILLS:
             if pos_idx in mill:
                 # Verifica se as outras 2 casas da trilha também são do jogador
@@ -216,15 +212,15 @@ class TrilhaGame:
         """Verifica se TODAS as peças do 'player' estão protegidas em trilhas."""
         # Lista todas as posições onde o inimigo tem peças
         indices_player = [i for i, p in enumerate(self.board) if p == player]
-        
+
         if not indices_player:
-            return False # Se não tem peças, irrelevante
-            
+            return False  # Se não tem peças, irrelevante
+
         # Se acharmos UMA peça que não está em trilha, retorna False (pode remover essa)
         for idx in indices_player:
             if not self.is_part_of_mill(idx, player):
                 return False
-                
+
         # Se chegou aqui, é porque todas estão em trilha (então a regra de proteção cai)
         return True
 
@@ -237,16 +233,40 @@ class TrilhaGame:
         if self.pieces_to_place["V"] == 0 and self.pieces_to_place["R"] == 0:
             self.phase = "MOVEMENT"
 
-    def check_winner(self):
-        """Retorna 'V', 'R', 'Draw' ou None (jogo segue)."""
-        # Só checa vitória na fase de movimento
+    def has_valid_moves(self, player):
+        """Verifica se o jogador tem pelo menos um movimento possível."""
+        # Se for fase de colocação e tiver peças na mão, tem movimento
+        if self.phase == "PLACEMENT":
+            return self.pieces_to_place[player] > 0
+
+        # Se for fase de movimento
         if self.phase == "MOVEMENT":
+            # Varre todas as peças do jogador no tabuleiro
+            for pos, p in enumerate(self.board):
+                if p == player:
+                    # Verifica se tem algum vizinho livre
+                    if pos in self.ADJACENCY:
+                        for neighbor in self.ADJACENCY[pos].values():
+                            if self.board[neighbor] is None:
+                                return True  # Achou pelo menos um escape
+            return False  # Nenhuma peça pode mover
+
+        return True
+
+    # Atualize o método check_winner para usar essa nova verificação
+    def check_winner(self):
+        """Retorna 'V', 'R' ou None."""
+        if self.phase == "MOVEMENT":
+            # 1. Critério de Peças (Menos de 3 perde)
             if self.pieces_on_board["V"] < 3:
                 return "R"
             if self.pieces_on_board["R"] < 3:
                 return "V"
 
-            # TODO: Checar se o jogador atual está "trancado" (sem movimentos válidos)
-            # Isso é condição de derrota também.
+            # 2. Critério de Bloqueio (Sem movimentos perde)
+            # Verifica se o jogador ATUAL (que precisa jogar agora) está trancado
+            if not self.has_valid_moves(self.turn):
+                # Se é a vez do V e ele não tem movimentos, R ganha
+                return "R" if self.turn == "V" else "V"
 
         return None

@@ -1,5 +1,3 @@
-# Arquivo: debug.py
-import time
 import numpy as np
 from envs.trilha_gym import TrilhaEnv
 

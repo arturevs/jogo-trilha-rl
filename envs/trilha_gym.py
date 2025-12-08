@@ -4,7 +4,6 @@ from gymnasium import spaces
 import numpy as np
 from typing import Optional, Dict
 
-# Importação relativa (assumindo que estão na mesma pasta 'envs')
 from .game_logic import TrilhaGame
 
 
@@ -13,50 +12,37 @@ class TrilhaEnv(gym.Env):
 
     def __init__(self):
         super(TrilhaEnv, self).__init__()
-
         self.game = TrilhaGame()
-
-        # AÇÃO (Action Space): Discreto com 120 possibilidades
-        # 0-23: Colocar (Place)
-        # 24-119: Mover (Move) -> Mapeados por (Origem * 4) + Direção
         self.action_space = spaces.Discrete(120)
-
-        # OBSERVAÇÃO (Observation Space): Tensor 3x24
-        # Canal 0: Minhas peças (1 se sim, 0 se não)
-        # Canal 1: Peças inimigas
-        # Canal 2: Espaços vazios (ou feature de 'pode colocar aqui')
         self.observation_space = spaces.Box(
             low=0, high=1, shape=(3, 24), dtype=np.float32
         )
 
+        # Limite de passos
         self.max_steps = 200
         self.current_step = 0
 
     def reset(self, seed: Optional[int] = None, options: Optional[Dict] = None):
         super().reset(seed=seed)
-        self.current_step = 0  # Reseta o contador
+        self.current_step = 0
         self.game.reset()
-
-        observation = self._get_obs()
-        info = self._get_info()
-        return observation, info
+        return self._get_obs(), self._get_info()
 
     def step(self, action_idx: int):
-        # --- CORREÇÃO: Captura quem está jogando ANTES de qualquer mudança ---
         player_who_moved = self.game.turn
 
         terminated = False
         truncated = False
         reward = 0
-        info = {}
 
         self.current_step += 1
 
         try:
-            # 1. Executa Ação
+            step_penalty = -0.01
+            reward += step_penalty
+
             if action_idx < 24:
                 self.game.apply_place(action_idx)
-                reward += 0.2
             else:
                 move_idx = action_idx - 24
                 start_pos = move_idx // 4
@@ -69,50 +55,44 @@ class TrilhaEnv(gym.Env):
                     )
                     if target_pos is not None:
                         self.game.apply_move(start_pos, target_pos)
-                        reward += 0.2
                     else:
-                        reward -= 10
+                        reward -= 10  # Punição Ilegal mantém alta
                 else:
                     reward -= 10
 
-            # 2. Auto-Remoção
+            # --- AUTO-REMOÇÃO ---
             if self.game.pending_removal:
-                reward += 5.0
+                reward += 10.0  # Aumentei o incentivo para fazer trilhas
                 removed = self._auto_remove_piece()
-
                 if not removed:
                     self.game.pending_removal = False
                     self.game._switch_turn_logic()
 
-            # 3. Checa Vitória
+            # --- VITÓRIA ---
             winner = self.game.check_winner()
             if winner:
                 terminated = True
-                # --- CORREÇÃO: Usamos a variável capturada no início ---
                 if winner == player_who_moved:
-                    reward += 50
+                    reward += 100  # Aumentei para garantir que vale a pena
                 else:
-                    reward -= 50
-
-            # 4. Checa Limite de Passos
-            if self.current_step >= self.max_steps:
-                truncated = True
+                    reward -= 100
 
         except ValueError:
-            reward = -10
+            reward = -10  # Punição por tentar jogada impossível (regra do jogo)
+
+        if self.current_step >= self.max_steps:
+            truncated = True
 
         done = terminated or truncated
 
-        observation = self._get_obs()
-        info = self._get_info()
+        return self._get_obs(), reward, terminated, truncated, self._get_info()
 
-        return observation, reward, terminated, truncated, info
-
+    # ... (Mantenha _get_obs, _get_info, _auto_remove_piece e get_action_mask IGUAIS) ...
+    # Vou repetir apenas para garantir que você tenha o arquivo completo se copiar/colar
     def _get_obs(self):
         obs = np.zeros((3, 24), dtype=np.float32)
         curr = self.game.turn
         opp = "R" if curr == "V" else "V"
-
         for i, p in enumerate(self.game.board):
             if p == curr:
                 obs[0][i] = 1
@@ -126,34 +106,27 @@ class TrilhaEnv(gym.Env):
         return {"turn": self.game.turn, "phase": self.game.phase}
 
     def _auto_remove_piece(self):
-        """Tenta remover peça. Retorna True se conseguiu, False se falhou."""
         opponent = "R" if self.game.turn == "V" else "V"
         for i, piece in enumerate(self.game.board):
             if piece == opponent:
                 try:
                     self.game.apply_remove(i)
-                    return True  # Sucesso!
+                    return True
                 except ValueError:
-                    continue  # Tenta a próxima
-        return False  # Falhou em remover qualquer peça
+                    continue
+        return False
 
     def get_action_mask(self):
-        # ... (Mantenha sua lógica de máscara igual) ...
-        # Apenas copiei o cabeçalho para lembrar que ela existe.
-        # Use o código que você já tinha aqui.
         mask = np.zeros(120, dtype=np.int8)
-        # ... (Cole sua lógica aqui) ...
-
-        # Re-inserindo a lógica que você já tinha para garantir:
         if self.game.phase == "PLACEMENT":
             for i in range(24):
                 if self.game.is_valid_place(i):
                     mask[i] = 1
         elif self.game.phase == "MOVEMENT":
             dirs = ["d", "e", "c", "b"]
-            current_player = self.game.turn
+            curr = self.game.turn
             for pos in range(24):
-                if self.game.board[pos] == current_player:
+                if self.game.board[pos] == curr:
                     for i, d in enumerate(dirs):
                         if pos in self.game.ADJACENCY:
                             target = self.game.ADJACENCY[pos].get(d)
