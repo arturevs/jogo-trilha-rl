@@ -1,20 +1,15 @@
 import time
-import torch
-import numpy as np
 import os
 import sys
 
-# Ajuste de path para importar módulos
 sys.path.append(os.getcwd())
 
-from envs.game_logic import TrilhaGame
 from envs.trilha_gym import TrilhaEnv
-from train import RandomAgent, TrainedModelAgent, DEVICE
+from train import RandomAgent, TrainedModelAgent
 
-# --- CONFIGURAÇÃO VISUAL ---
-COLOR_V = "🔴"  # Jogador V (Vermelho)
-COLOR_R = "🔵"  # Jogador R (Azul)
-COLOR_EMPTY = "⚫"  # Vazio (ou use "⚪" ou "  ")
+COLOR_V = "🔴"
+COLOR_R = "🔵"
+COLOR_EMPTY = "⚫"
 COLOR_LINE = "➖"
 COLOR_PIPE = "│"
 
@@ -34,25 +29,17 @@ def render_board(game):
     Renderiza o tabuleiro de forma bonita no terminal usando a matriz 7x7.
     O jogo usa índices lineares (0-23), então precisamos mapear.
     """
-    # Mapeamento visual reverso (Coord visual -> Índice Lógico)
-    # Apenas para desenhar. Se for None, é espaço vazio não jogável.
-
-    # Criamos uma matriz 7x7 visual
     grid = [[None for _ in range(7)] for _ in range(7)]
 
-    # Mapeamento do envs/trilha_gym.py (idx_to_coord)
     idx_map = {
         0: (0, 0),
         1: (0, 3),
         2: (0, 6),
         3: (1, 1),
         4: (1, 3),
-        5: (1, 5),  # Corrigindo ordem visual concêntrica
-        # Ops, a lógica do jogo é Anel Externo -> Médio -> Interno.
-        # Vamos usar o board state direto.
+        5: (1, 5),
     }
 
-    # Vamos usar o board direto e colocar nas posições manuais para ficar bonito
     b = game.board
 
     def p(idx):
@@ -61,11 +48,7 @@ def render_board(game):
             return COLOR_V
         if piece == "R":
             return COLOR_R
-        return "⚪"  # Ponto vazio jogável
-
-    # Layout ASCII Hardcoded para Trilha
-    # Indices baseados no game_logic.py:
-    # Ext: 0..7 | Med: 8..15 | Int: 16..23
+        return "⚪"
 
     print(f"\n   {p(0)}──────────────{p(1)}──────────────{p(2)}")
     print("   │              │              │")
@@ -81,7 +64,6 @@ def render_board(game):
     print("   │              │              │")
     print(f"   {p(6)}──────────────{p(5)}──────────────{p(4)}\n")
 
-    # Placar
     print(f"   Turno: {COLOR_V if game.turn == 'V' else COLOR_R}")
     print(f"   Fase: {game.phase}")
     if game.pending_removal:
@@ -130,7 +112,6 @@ def run_match(agent_v, agent_r, delay=0.5):
     obs, info = env.reset()
     game = env.game
 
-    # Mapear agentes
     agents = {"V": agent_v, "R": agent_r}
 
     done = False
@@ -143,8 +124,6 @@ def run_match(agent_v, agent_r, delay=0.5):
         current_player = game.turn
         current_agent = agents[current_player]
 
-        # Pega ação
-        # Nota: TrainedModelAgent precisa do mask e state
         mask = env.get_action_mask()
 
         # Pequeno delay para visualização
@@ -152,29 +131,12 @@ def run_match(agent_v, agent_r, delay=0.5):
 
         print(f"🤔 {current_player} está pensando...")
 
-        # O TrainedModelAgent foi feito para jogar como "V" (Player 1 da visão da rede).
-        # Se ele estiver jogando como "R", precisamos inverter a observação?
-        # A classe TrilhaEnv atual já inverte a observação no _get_obs() baseada no turno!
-        # Então o obs[0] é sempre "minhas peças" e obs[1] "inimigo".
-        # O modelo pode jogar de qualquer lado sem mexer nos dados.
-
         action = current_agent.act(obs, mask, game)
-
-        # Executa no ambiente
-        # Importante: Como estamos rodando manualmente o loop, usamos game.apply direto?
-        # Não, usamos env.step para manter compatibilidade com a lógica de recompensa/regra
-        # Mas o env.step atual executa DOIS turnos (Agente e Oponente).
-        # Precisamos de um step "unitário" para visualização passo a passo.
-        # Vamos interagir direto com a lógica do jogo (game) ou adaptar o env.
-
-        # Para visualização, é melhor chamar a lógica do jogo diretamente com proteções,
-        # pois o env.step foi desenhado para treino (turnos acoplados).
 
         try:
             if action < 24:
                 game.apply_place(action)
             else:
-                # Decodificar movimento
                 move_idx = action - 24
                 start = move_idx // 4
                 direction = move_idx % 4
@@ -182,7 +144,6 @@ def run_match(agent_v, agent_r, delay=0.5):
                 target = game.ADJACENCY[start][dirs[direction]]
                 game.apply_move(start, target)
 
-            # Auto-remoção visual
             if game.pending_removal:
                 clear_screen()
                 print_header()
@@ -190,7 +151,6 @@ def run_match(agent_v, agent_r, delay=0.5):
                 print(f"⚔️  {current_player} fez trilha! Removendo peça...")
                 time.sleep(delay)
 
-                # Tenta remover (Lógica simplificada igual ao treino: primeira válida)
                 removed = False
                 opp = "R" if current_player == "V" else "V"
                 for i, p in enumerate(game.board):
@@ -203,7 +163,6 @@ def run_match(agent_v, agent_r, delay=0.5):
                             continue
 
                 if not removed:
-                    # Caso raro onde não dá pra remover nada (não deveria acontecer mais)
                     game.pending_removal = False
                     game._switch_turn_logic()
 
@@ -211,7 +170,6 @@ def run_match(agent_v, agent_r, delay=0.5):
             print(f"❌ Erro Crítico: {e}")
             break
 
-        # Verifica vitória
         winner = game.check_winner()
         if winner:
             clear_screen()
@@ -222,7 +180,6 @@ def run_match(agent_v, agent_r, delay=0.5):
             )
             break
 
-        # Atualiza obs para o próximo
         obs = env._get_obs()
 
 
@@ -230,7 +187,6 @@ def main():
     clear_screen()
     print_header()
 
-    # Setup Env dummy para carregar modelos (pegar shapes)
     dummy_env = TrilhaEnv()
 
     print("Configuração da Partida:")

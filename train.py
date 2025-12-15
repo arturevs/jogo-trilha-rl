@@ -1,4 +1,3 @@
-# Arquivo: train.py
 import math
 import torch
 import torch.optim as optim
@@ -8,7 +7,6 @@ import random
 from collections import deque
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-import copy
 
 from envs.trilha_gym import TrilhaEnv
 from models.dqn_net import TrilhaDQN
@@ -16,18 +14,21 @@ from models.dqn_net import TrilhaDQN
 # --- HYPERPARAMETERS ---
 BATCH_SIZE = 128
 GAMMA = 0.99
-LR = 1e-4 
+LR = 1e-4
 MEMORY_SIZE = 50000
 TARGET_UPDATE = 500
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # --- AGENTES AUXILIARES ---
 
+
 class RandomAgent:
     def act(self, state, mask, game_engine):
         valid_indices = np.where(mask == 1)[0]
-        if len(valid_indices) == 0: return 0
+        if len(valid_indices) == 0:
+            return 0
         return int(np.random.choice(valid_indices))
+
 
 class TrainedModelAgent:
     def __init__(self, model_path, env):
@@ -37,27 +38,34 @@ class TrainedModelAgent:
 
     def act(self, state, mask, game_engine):
         valid_indices = np.where(mask == 1)[0]
-        if len(valid_indices) == 0: return 0
-        
+        if len(valid_indices) == 0:
+            return 0
+
         state_t = torch.FloatTensor(state).unsqueeze(0).to(DEVICE)
-        
+
         with torch.no_grad():
             q_values = self.net(state_t)
             tensor_mask = torch.BoolTensor(mask).to(DEVICE)
             q_values[0, ~tensor_mask] = -float("inf")
             return q_values.max(1)[1].item()
 
+
 # --- UTILS DE TREINO ---
+
 
 class ReplayBuffer:
     def __init__(self, capacity):
         self.buffer = deque(maxlen=capacity)
+
     def push(self, state, action, reward, next_state, done, mask):
         self.buffer.append((state, action, reward, next_state, done, mask))
+
     def sample(self, batch_size):
         return random.sample(self.buffer, batch_size)
+
     def __len__(self):
         return len(self.buffer)
+
 
 class EarlyStopping:
     def __init__(self, patience=200, min_delta=0.5, start_from=1000):
@@ -70,7 +78,7 @@ class EarlyStopping:
         self.patience = patience
         self.min_delta = min_delta
         self.start_from = start_from
-        self.best_reward = -float('inf')
+        self.best_reward = -float("inf")
         self.counter = 0
         self.early_stop = False
 
@@ -81,24 +89,26 @@ class EarlyStopping:
             self.best_reward = current_reward
             self.counter = 0
             torch.save(model.state_dict(), path)
-            return True # Salvou novo melhor
-        
+            return True  # Salvou novo melhor
+
         # Lógica de parada só ativa após o aquecimento (start_from)
         if episode < self.start_from:
-            self.counter = 0 # Mantém resetado durante o aquecimento
+            self.counter = 0  # Mantém resetado durante o aquecimento
             return False
 
         # Se não melhorou e já passou do aquecimento, conta paciência
         self.counter += 1
         if self.counter >= self.patience:
             self.early_stop = True
-            
+
         return False
+
 
 def select_action(state, mask, model, epsilon):
     valid_indices = np.where(mask == 1)[0]
-    if len(valid_indices) == 0: return 0
-    
+    if len(valid_indices) == 0:
+        return 0
+
     if random.random() < epsilon:
         return int(np.random.choice(valid_indices))
 
@@ -108,39 +118,42 @@ def select_action(state, mask, model, epsilon):
         q_values[0, ~tensor_mask] = -float("inf")
         return q_values.max(1)[1].item()
 
+
 def train_phase(phase_name, opponent_agent, num_episodes, save_path, load_path=None):
     print(f"\n>>> INICIANDO FASE: {phase_name}")
     env = TrilhaEnv()
     env.set_opponent(opponent_agent)
 
     policy_net = TrilhaDQN(env.observation_space.shape, env.action_space.n).to(DEVICE)
-    
+
     if load_path:
         print(f"Carregando pesos pré-treinados de {load_path}...")
         policy_net.load_state_dict(torch.load(load_path, map_location=DEVICE))
-    
+
     target_net = TrilhaDQN(env.observation_space.shape, env.action_space.n).to(DEVICE)
     target_net.load_state_dict(policy_net.state_dict())
     target_net.eval()
 
     optimizer = optim.Adam(policy_net.parameters(), lr=LR)
     memory = ReplayBuffer(MEMORY_SIZE)
-    
+
     # Configura Early Stopping para ignorar os primeiros 1000 episódios
     early_stopping = EarlyStopping(patience=300, min_delta=1.0, start_from=1000)
 
     rewards_history = []
     avg_rewards_history = []
-    
+
     epsilon_start = 1.0 if not load_path else 0.5
     epsilon_end = 0.05
-    epsilon_decay = num_episodes * 0.4 
+    epsilon_decay = num_episodes * 0.4
 
     pbar = tqdm(range(num_episodes), desc=phase_name, unit="ep")
-    
+
     for episode in pbar:
-        epsilon = epsilon_end + (epsilon_start - epsilon_end) * math.exp(-1.0 * episode / epsilon_decay)
-        
+        epsilon = epsilon_end + (epsilon_start - epsilon_end) * math.exp(
+            -1.0 * episode / epsilon_decay
+        )
+
         state, _ = env.reset()
         state = torch.FloatTensor(state).unsqueeze(0).to(DEVICE)
         total_reward = 0
@@ -162,7 +175,14 @@ def train_phase(phase_name, opponent_agent, num_episodes, save_path, load_path=N
 
             if len(memory) > BATCH_SIZE:
                 transitions = memory.sample(BATCH_SIZE)
-                batch_state, batch_action, batch_reward, batch_next_state, batch_done, _ = zip(*transitions)
+                (
+                    batch_state,
+                    batch_action,
+                    batch_reward,
+                    batch_next_state,
+                    batch_done,
+                    _,
+                ) = zip(*transitions)
 
                 b_state = torch.cat(batch_state)
                 b_action = torch.LongTensor(batch_action).unsqueeze(1).to(DEVICE)
@@ -171,7 +191,7 @@ def train_phase(phase_name, opponent_agent, num_episodes, save_path, load_path=N
                 b_done = torch.FloatTensor(batch_done).unsqueeze(1).to(DEVICE)
 
                 current_q = policy_net(b_state).gather(1, b_action)
-                
+
                 with torch.no_grad():
                     next_q_values = target_net(b_next_state)
                     max_next_q = next_q_values.max(1)[0].unsqueeze(1)
@@ -186,25 +206,35 @@ def train_phase(phase_name, opponent_agent, num_episodes, save_path, load_path=N
             target_net.load_state_dict(policy_net.state_dict())
 
         rewards_history.append(total_reward)
-        avg_reward = np.mean(rewards_history[-50:]) if len(rewards_history) > 50 else np.mean(rewards_history)
+        avg_reward = (
+            np.mean(rewards_history[-50:])
+            if len(rewards_history) > 50
+            else np.mean(rewards_history)
+        )
         avg_rewards_history.append(avg_reward)
 
         # Passamos o episódio atual para o early_stopping checar o start_from
         saved = early_stopping(avg_reward, policy_net, save_path, episode)
-        
+
         status = "💾 Saved" if saved else ""
         if episode < early_stopping.start_from:
             status += " (Warmup)"
-            
-        pbar.set_postfix({"AvgR": f"{avg_reward:.1f}", "Best": f"{early_stopping.best_reward:.1f}", "St": status})
+
+        pbar.set_postfix(
+            {
+                "AvgR": f"{avg_reward:.1f}",
+                "Best": f"{early_stopping.best_reward:.1f}",
+                "St": status,
+            }
+        )
 
         if early_stopping.early_stop:
             print(f"\nEarly Stopping at episode {episode}!")
             break
 
     plt.figure(figsize=(10, 5))
-    plt.plot(rewards_history, alpha=0.3, color='gray', label='Raw')
-    plt.plot(avg_rewards_history, color='blue', label='Avg')
+    plt.plot(rewards_history, alpha=0.3, color="gray", label="Raw")
+    plt.plot(avg_rewards_history, color="blue", label="Avg")
     plt.title(f"Treino: {phase_name}")
     plt.xlabel("Episódio")
     plt.ylabel("Recompensa")
@@ -214,25 +244,29 @@ def train_phase(phase_name, opponent_agent, num_episodes, save_path, load_path=N
 
     print(f"Fase {phase_name} concluída. Melhor modelo salvo em: {save_path}")
 
+
 def main():
     # FASE 1: VS RANDOM
     train_phase(
         phase_name="VS_RANDOM",
         opponent_agent=RandomAgent(),
         num_episodes=3000,
-        save_path="model_vs_random.pth"
+        save_path="model_vs_random.pth",
     )
 
     # FASE 2: VS EXPERT (Fine-tuning)
-    expert_opponent = TrainedModelAgent(model_path="model_vs_random.pth", env=TrilhaEnv())
-    
+    expert_opponent = TrainedModelAgent(
+        model_path="model_vs_random.pth", env=TrilhaEnv()
+    )
+
     train_phase(
         phase_name="VS_EXPERT",
         opponent_agent=expert_opponent,
         num_episodes=5000,
         save_path="model_vs_expert.pth",
-        load_path="model_vs_random.pth"
+        load_path="model_vs_random.pth",
     )
+
 
 if __name__ == "__main__":
     main()

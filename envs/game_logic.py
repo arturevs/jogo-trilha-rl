@@ -1,6 +1,4 @@
-# Arquivo: envs/game_logic.py
 class TrilhaGame:
-    # --- DEFINIÇÕES ESTÁTICAS (Constantes) ---
     ADJACENCY = {
         0: {"d": 1, "b": 7},
         1: {"e": 0, "d": 2, "b": 9},
@@ -29,10 +27,22 @@ class TrilhaGame:
     }
 
     POSSIBLE_MILLS = [
-        {0, 1, 2}, {2, 3, 4}, {4, 5, 6}, {6, 7, 0},
-        {8, 9, 10}, {10, 11, 12}, {12, 13, 14}, {14, 15, 8},
-        {16, 17, 18}, {18, 19, 20}, {20, 21, 22}, {22, 23, 16},
-        {1, 9, 17}, {3, 11, 19}, {5, 13, 21}, {7, 15, 23},
+        {0, 1, 2},
+        {2, 3, 4},
+        {4, 5, 6},
+        {6, 7, 0},
+        {8, 9, 10},
+        {10, 11, 12},
+        {12, 13, 14},
+        {14, 15, 8},
+        {16, 17, 18},
+        {18, 19, 20},
+        {20, 21, 22},
+        {22, 23, 16},
+        {1, 9, 17},
+        {3, 11, 19},
+        {5, 13, 21},
+        {7, 15, 23},
     ]
 
     def __init__(self):
@@ -56,8 +66,6 @@ class TrilhaGame:
             "pending_removal": self.pending_removal,
             "counts": self.pieces_on_board.copy(),
         }
-
-    # --- LÓGICA DE REGRAS (Validadores) ---
 
     def is_valid_place(self, pos_idx):
         if self.phase != "PLACEMENT":
@@ -93,11 +101,7 @@ class TrilhaGame:
         if piece != opponent:
             return False
 
-        # --- ALTERAÇÃO AQUI: Regra de proteção removida ---
-        # Antes verificava is_part_of_mill, agora permite sempre.
         return True
-
-    # --- AÇÕES (Executores) ---
 
     def apply_place(self, pos_idx):
         if not self.is_valid_place(pos_idx):
@@ -135,8 +139,6 @@ class TrilhaGame:
 
         self._switch_turn_logic()
 
-    # --- AUXILIARES INTERNOS ---
-
     def check_mill_formed(self, pos_idx):
         player = self.board[pos_idx]
         for mill in self.POSSIBLE_MILLS:
@@ -155,7 +157,6 @@ class TrilhaGame:
         return False
 
     def all_enemies_in_mill(self, player):
-        # Mantido para compatibilidade, mas não é mais usado na validação
         indices_player = [i for i, p in enumerate(self.board) if p == player]
         if not indices_player:
             return False

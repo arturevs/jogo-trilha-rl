@@ -1,10 +1,10 @@
-# Arquivo: envs/trilha_gym.py
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 from typing import Optional, Dict
 
 from .game_logic import TrilhaGame
+
 
 class TrilhaEnv(gym.Env):
     metadata = {"render_modes": ["human", "ansi"], "render_fps": 4}
@@ -19,9 +19,8 @@ class TrilhaEnv(gym.Env):
 
         self.max_steps = 200
         self.current_step = 0
-        
-        # O oponente será injetado aqui. Se None, o ambiente espera controle manual (não usado no treino novo)
-        self.opponent_agent = None 
+
+        self.opponent_agent = None
 
     def set_opponent(self, agent):
         """Define quem jogará contra o modelo treinado (Random ou Frozen Model)."""
@@ -31,11 +30,7 @@ class TrilhaEnv(gym.Env):
         super().reset(seed=seed)
         self.current_step = 0
         self.game.reset()
-        
-        # Se o oponente for o 'V' (começa jogando), ele faz o primeiro movimento
-        # Mas para simplificar, vamos assumir que nosso Agente Treinado sempre joga como 'V' (Player 1)
-        # e o Oponente como 'R' (Player 2).
-        
+
         return self._get_obs(), self._get_info()
 
     def step(self, action_idx: int):
@@ -51,35 +46,25 @@ class TrilhaEnv(gym.Env):
         total_reward = 0
         terminated = False
         truncated = False
-        
-        # --- 1. TURNO DO AGENTE (V) ---
+
         reward_agent, done_agent = self._execute_move(action_idx, player="V")
         total_reward += reward_agent
-        
+
         if done_agent:
             return self._get_obs(), total_reward, True, False, self._get_info()
 
-        # --- 2. TURNO DO OPONENTE (R) ---
         if self.opponent_agent is not None:
-            # Oponente observa o tabuleiro invertido (para ele, ele é o 'amigo')
-            # Mas aqui simplificaremos: passamos o estado atual e a máscara
-            opp_state = self._get_obs() # O modelo do oponente deve saber lidar com isso
-            opp_mask = self.get_action_mask() # Máscara válida para o turno atual (R)
-            
+            opp_state = self._get_obs()
+            opp_mask = self.get_action_mask()
             opp_action = self.opponent_agent.act(opp_state, opp_mask, self.game)
-            
+
             reward_opp, done_opp = self._execute_move(opp_action, player="R")
-            
-            # Inverter a lógica da recompensa: O que é bom para o oponente é ruim para o agente
-            # Mas cuidado: _execute_move retorna positivo para quem jogou.
-            # Se o oponente ganhou (+100), o agente recebe -100.
-            # Se o oponente fez trilha (+20), o agente recebe -20.
-            total_reward -= reward_opp 
-            
+
+            total_reward -= reward_opp
+
             if done_opp:
                 return self._get_obs(), total_reward, True, False, self._get_info()
 
-        # Checagem de limite de passos
         if self.current_step >= self.max_steps:
             truncated = True
 
@@ -89,7 +74,6 @@ class TrilhaEnv(gym.Env):
         """Aplica o movimento e calcula recompensa pontual para AQUELE jogador."""
         reward = 0
         try:
-            # Tenta aplicar o movimento
             if action_idx < 24:
                 self.game.apply_place(action_idx)
             else:
@@ -102,34 +86,33 @@ class TrilhaEnv(gym.Env):
                     if target is not None:
                         self.game.apply_move(start_pos, target)
                     else:
-                         return -10, False # Movimento inválido (estrutural)
+                        return -10, False
                 else:
                     return -10, False
 
-            # --- AUTO-REMOÇÃO E TRILHA ---
             if self.game.pending_removal:
-                reward += 20.0  # RECOMPENSA FORTE: Fez trilha
-                self._auto_remove_piece() # Remove peça do inimigo automaticamente
+                reward += 20.0
+                self._auto_remove_piece()
                 self.game.pending_removal = False
                 self.game._switch_turn_logic()
-            
+
             # --- VITÓRIA ---
             winner = self.game.check_winner()
             if winner:
                 if winner == player:
-                    reward += 100.0 # Ganhou
+                    reward += 100.0
                 else:
-                    reward -= 100.0 # Perdeu (Raro cair aqui dentro deste fluxo, mas possível)
+                    reward -= 100.0
                 return reward, True
 
         except ValueError:
-            return -10, False # Punição por tentar jogada impossível
+            return -10, False
 
         return reward, False
 
     def _get_obs(self):
         obs = np.zeros((3, 24), dtype=np.float32)
-        curr = self.game.turn # Quem joga agora
+        curr = self.game.turn  # Quem joga agora
         opp = "R" if curr == "V" else "V"
         for i, p in enumerate(self.game.board):
             if p == curr:
